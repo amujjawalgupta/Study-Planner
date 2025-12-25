@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyQuest | Integrated Gamified Planner</title>
+    <!-- Frameworks & Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-dark: #3730A3;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #F8FAFC;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #E2E8F0;
+            border-radius: 10px;
+        }
+        .view-section {
+            display: none;
+        }
+        .view-section.active {
+            display: block;
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .dnd-overlay {
+            display: none;
+            backdrop-filter: blur(10px);
+        }
+        .dnd-overlay.active {
+            display: flex;
+        }
+        .nav-btn.active {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2);
+        }
+        .reward-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body class="text-slate-900">
+
+    <!-- DND / FOCUS MODE OVERLAY -->
+    <div id="dndOverlay" class="dnd-overlay fixed inset-0 bg-slate-900/95 z-[100] flex-col items-center justify-center p-6 text-center">
+        <div class="animate-bounce mb-6">
+            <i data-lucide="moon" class="w-16 h-16 text-indigo-400"></i>
+        </div>
+        <h1 class="text-4xl font-black text-white mb-2">Focus Mode</h1>
+        <p class="text-slate-400 mb-12 max-w-sm">Silence distractions and earn +200 XP for completing this session without exiting.</p>
+        <div id="dndTimerDisplay" class="text-7xl font-mono text-white tracking-widest mb-12">25:00</div>
+        <button onclick="exitFocusMode(false)" class="px-8 py-3 rounded-full text-slate-500 border border-slate-800 hover:text-white transition-colors font-medium">Abandon Session</button>
+    </div>
+
+    <div class="min-h-screen flex flex-col lg:flex-row">
+        
+        <!-- SIDEBAR NAVIGATION -->
+        <nav class="w-full lg:w-72 bg-white border-r border-slate-200 p-6 flex flex-col gap-8">
+            <div class="flex items-center gap-3 px-2">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <i data-lucide="trophy" class="text-white w-6 h-6"></i>
+                </div>
+                <span class="text-xl font-black tracking-tighter">STUDYQUEST</span>
+            </div>
+
+            <div class="flex-1 space-y-1.5" id="navContainer">
+                <button onclick="switchView('dashboard')" data-view="dashboard" class="nav-btn active w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all">
+                    <div class="flex items-center gap-3"><i data-lucide="layout-dashboard" class="w-5 h-5"></i><span class="font-bold text-sm">Dashboard</span></div>
+                </button>
+                <button onclick="switchView('ai-study')" data-view="ai-study" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-slate-400 hover:bg-slate-100 hover:text-slate-900">
+                    <div class="flex items-center gap-3"><i data-lucide="brain-circuit" class="w-5 h-5"></i><span class="font-bold text-sm">AI Study Kit</span></div>
+                </button>
+                <button onclick="switchView('exams')" data-view="exams" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-slate-400 hover:bg-slate-100 hover:text-slate-900">
+                    <div class="flex items-center gap-3"><i data-lucide="timer" class="w-5 h-5"></i><span class="font-bold text-sm">Exams</span></div>
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                </button>
+                <button onclick="switchView('leaderboard')" data-view="leaderboard" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-slate-400 hover:bg-slate-100 hover:text-slate-900">
+                    <div class="flex items-center gap-3"><i data-lucide="medal" class="w-5 h-5"></i><span class="font-bold text-sm">Leaderboard</span></div>
+                </button>
+                <button onclick="switchView('rewards')" data-view="rewards" class="nav-btn w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-slate-400 hover:bg-slate-100 hover:text-slate-900">
+                    <div class="flex items-center gap-3"><i data-lucide="award" class="w-5 h-5"></i><span class="font-bold text-sm">Reward Shop</span></div>
+                </button>
+            </div>
+
+            <!-- Profile Widget -->
+            <div class="bg-slate-50 p-4 rounded-3xl space-y-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center font-bold text-white">AS</div>
+                    <div>
+                        <p class="text-sm font-black leading-none">Alex Smith</p>
+                        <p id="userLevelDisplay" class="text-[10px] text-slate-400 font-bold uppercase mt-1">Lvl 4 Scholar</p>
+                    </div>
+                </div>
+                <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div id="xpProgressBar" class="h-full bg-indigo-600 transition-all duration-700" style="width: 45%;"></div>
+                </div>
+                <div class="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    <span id="pointsDisplay">1200 XP</span>
+                    <span id="streakDisplay">5 Day Streak</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="flex-1 p-4 lg:p-10 overflow-y-auto max-h-screen custom-scrollbar">
+            <div class="max-w-5xl mx-auto">
+                
+                <!-- VIEW: DASHBOARD -->
+                <section id="view-dashboard" class="view-section active space-y-10">
+                    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div>
+                            <h1 class="text-3xl font-black">Hey, Alex! 👋</h1>
+                            <p class="text-slate-500">Welcome to your command center. Ready to level up?</p>
+                        </div>
+                        <div class="flex items-center gap-1 bg-orange-100 text-orange-600 px-4 py-2 rounded-full font-black text-sm">
+                            <i data-lucide="flame" class="w-4 h-4"></i> 5 DAY STREAK
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Left Column -->
+                        <div class="lg:col-span-2 space-y-8">
+                            <!-- Mini Exam Widget -->
+                            <div class="space-y-4">
+                                <h2 class="text-xl font-bold flex items-center gap-2">
+                                    <i data-lucide="calendar" class="text-red-500 w-5 h-5"></i> Urgent Exams
+                                </h2>
+                                <div id="dashboardExamList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- Dynamic content -->
+                                </div>
+                            </div>
+
+                            <!-- Mission List -->
+                            <div class="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+                                <h2 class="font-bold flex items-center gap-2 text-slate-800">
+                                    <i data-lucide="target" class="text-indigo-500 w-5 h-5"></i> Daily Missions
+                                </h2>
+                                <div id="dashboardTaskList" class="space-y-4">
+                                    <!-- Dynamic content -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            <!-- Focus Mode Widget -->
+                            <div class="bg-indigo-900 p-8 rounded-[2.5rem] text-white space-y-4 relative overflow-hidden">
+                                <h3 class="text-xl font-black">Focus Mode</h3>
+                                <p class="text-indigo-200 text-xs leading-relaxed">Boost your productivity and earn a "Deep Work" bonus.</p>
+                                <button onclick="startFocusMode(25)" class="w-full bg-white text-indigo-900 py-3 rounded-2xl font-black text-sm hover:bg-indigo-50 transition-colors">
+                                    Start 25m Session
+                                </button>
+                                <div class="absolute -right-6 -bottom-6 opacity-10">
+                                    <i data-lucide="zap" class="w-32 h-32"></i>
+                                </div>
+                            </div>
+
+                            <!-- Mini Leaderboard -->
+                            <div class="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                                <h3 class="font-bold mb-4 flex justify-between">Rankings <i data-lucide="medal" class="text-yellow-500 w-4 h-4"></i></h3>
+                                <div id="miniLeaderboard" class="space-y-4">
+                                    <!-- Dynamic content -->
+                                </div>
+                                <button onclick="switchView('leaderboard')" class="w-full mt-6 text-[10px] font-black uppercase text-indigo-600 tracking-widest hover:underline">View All Rankings</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: AI STUDY KIT -->
+                <section id="view-ai-study" class="view-section space-y-6">
+                    <div class="text-center space-y-2 mb-8">
+                        <h1 class="text-3xl font-black">AI Study Kit</h1>
+                        <p class="text-slate-500">Transform your notes into interactive revision tools.</p>
+                    </div>
+                    <div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl space-y-4">
+                        <textarea id="aiInput" placeholder="Paste your study notes here (e.g., Photosynthesis is the process...)" class="w-full h-48 p-6 bg-slate-50 rounded-3xl border-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"></textarea>
+                        <button id="aiBtn" onclick="generateAIKit()" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all">
+                            <i data-lucide="brain-circuit" class="w-5 h-5"></i> Generate AI Quiz (+50 XP)
+                        </button>
+                    </div>
+                    
+                    <div id="aiLoading" class="hidden flex flex-col items-center py-10 gap-4">
+                        <div class="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                        <p class="font-bold text-indigo-600">AI is analyzing your material...</p>
+                    </div>
+
+                    <div id="aiOutput" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                        <div class="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100">
+                            <h3 class="font-black text-emerald-800 mb-2 italic">Smart Summary</h3>
+                            <p id="summaryText" class="text-sm text-emerald-900 leading-relaxed"></p>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                            <h3 class="font-black text-slate-800 mb-4">Quick Quiz</h3>
+                            <div id="quizList" class="space-y-4"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: EXAMS -->
+                <section id="view-exams" class="view-section space-y-6">
+                    <div class="flex justify-between items-center mb-8">
+                        <h1 class="text-3xl font-black">Exam Schedule</h1>
+                        <button class="bg-white border border-slate-200 p-2 rounded-xl text-slate-400 hover:text-indigo-600 transition-colors">
+                            <i data-lucide="plus" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <div id="fullExamList" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Dynamic content -->
+                    </div>
+                </section>
+
+                <!-- VIEW: LEADERBOARD -->
+                <section id="view-leaderboard" class="view-section space-y-6">
+                    <div class="text-center space-y-2 mb-8">
+                        <h1 class="text-3xl font-black text-slate-900">Academic Arena</h1>
+                        <p class="text-slate-500">Competing in Global Bronze League</p>
+                    </div>
+                    <div class="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                        <div class="bg-slate-900 p-8 flex flex-col md:flex-row justify-between items-center text-white gap-6">
+                            <div class="flex items-center gap-4">
+                                <i data-lucide="medal" class="text-yellow-400 w-10 h-10"></i>
+                                <div>
+                                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Global Ranking</p>
+                                    <p class="text-2xl font-black">Rank #1 Overall</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p id="fullTotalScore" class="text-3xl font-black text-indigo-400">0</p>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime XP Earned</p>
+                            </div>
+                        </div>
+                        <div id="leaderboardFullList" class="p-4 space-y-2">
+                            <!-- Dynamic content -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VIEW: REWARDS -->
+                <section id="view-rewards" class="view-section space-y-8">
+                    <div class="text-center space-y-2 mb-10">
+                        <h1 class="text-3xl font-black">Reward Emporium</h1>
+                        <p class="text-slate-500">Spend your XP on digital and real-world perks.</p>
+                    </div>
+                    <div id="rewardGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Dynamic content -->
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- SCRIPT SECTION -->
+    <script>
+        // --- DATA & STATE ---
+        const apiKey = ""; // Set at runtime
+        
+        let state = {
+            user: {
+                name: "Alex Smith",
+                level: 4,
+                xp: 450,
+                nextXp: 1000,
+                points: 1200,
+                streak: 5
+            },
+            exams: [
+                { id: 'e1', subject: "Biology 101", type: "Final Exam", date: "2025-01-15T09:00:00", priority: "High" },
+                { id: 'e2', subject: "World History", type: "Midterm", date: "2025-01-05T14:00:00", priority: "Medium" },
+                { id: 'e3', subject: "Calculus II", type: "Pop Quiz", date: "2025-01-02T10:30:00", priority: "High" },
+            ],
+            tasks: [
+                { id: 1, title: "Biology Midterm Prep", pts: 150, done: false, category: "Science" },
+                { id: 2, title: "History Essay Draft", pts: 200, done: false, category: "History" },
+                { id: 3, title: "Library Research", pts: 100, done: true, category: "General" }
+            ],
+            leaderboard: [
+                { name: "Alex Smith", xp: 4850, lvl: 12, self: true, av: "AS" },
+                { name: "Sarah J.", xp: 4600, lvl: 11, self: false, av: "SJ" },
+                { name: "Marcus V.", xp: 4200, lvl: 10, self: false, av: "MV" },
+                { name: "Elena R.", xp: 3900, lvl: 9, self: false, av: "ER" },
+                { name: "Kevin T.", xp: 3100, lvl: 7, self: false, av: "KT" }
+            ],
+            rewards: [
+                { id: 1, name: "Extra Credit", cost: 1000, type: "Academic", icon: "award" },
+                { id: 2, name: "Premium Avatar", cost: 500, type: "Digital", icon: "zap" },
+                { id: 3, name: "Cafe Voucher", cost: 2000, type: "Real-world", icon: "coffee" }
+            ],
+            focusTimer: null
+        };
+
+        // --- NAVIGATION ---
+        function switchView(viewId) {
+            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                b.classList.remove('active');
+                if(b.dataset.view === viewId) b.classList.add('active');
+            });
+            
+            // Re-render specifics if needed
+            if (viewId === 'leaderboard') renderLeaderboard();
+            if (viewId === 'exams') renderExams();
+            if (viewId === 'rewards') renderRewards();
+        }
+
+        // --- RENDERING LOGIC ---
+        function renderAll() {
+            renderUserStats();
+            renderDashboard();
+            lucide.createIcons();
+        }
+
+        function renderUserStats() {
+            document.getElementById('userLevelDisplay').innerText = `Lvl ${state.user.level} Scholar`;
+            document.getElementById('xpProgressBar').style.width = (state.user.xp / state.user.nextXp * 100) + '%';
+            document.getElementById('pointsDisplay').innerText = `${state.user.points} XP Available`;
+            document.getElementById('streakDisplay').innerText = `${state.user.streak} Day Streak`;
+            
+            const fullScoreEl = document.getElementById('fullTotalScore');
+            if (fullScoreEl) fullScoreEl.innerText = (state.user.xp + 4000).toLocaleString();
+        }
+
+        function renderDashboard() {
+            // Missions
+            const taskHtml = state.tasks.map(t => `
+                <div class="flex items-center justify-between group p-2 hover:bg-slate-50 rounded-xl transition-colors">
+                    <div class="flex items-center gap-3">
+                        <button onclick="toggleTask(${t.id})" class="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${t.done ? 'bg-indigo-600 border-indigo-600' : 'border-slate-200'}">
+                            ${t.done ? '<i data-lucide="check" class="w-4 h-4 text-white"></i>' : ''}
+                        </button>
+                        <div>
+                            <p class="text-sm font-bold ${t.done ? 'line-through text-slate-300' : 'text-slate-700'}">${t.title}</p>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">${t.category}</p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-black text-indigo-400">+${t.pts} XP</span>
+                </div>
+            `).join('');
+            document.getElementById('dashboardTaskList').innerHTML = taskHtml;
+
+            // Exams (Dashboard Mini)
+            const examHtml = state.exams.slice(0, 2).map(e => {
+                const days = Math.ceil((new Date(e.date) - new Date()) / (1000*60*60*24));
+                return `
+                <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col gap-3 group hover:border-indigo-200 transition-all">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded ${e.priority === 'High' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}">${e.priority}</span>
+                            <h3 class="text-lg font-bold text-slate-800 mt-1">${e.subject}</h3>
+                            <p class="text-xs text-slate-400">${e.type}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-black ${days < 3 ? 'text-red-500 animate-pulse' : 'text-slate-900'}">${days}</p>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Days</p>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            document.getElementById('dashboardExamList').innerHTML = examHtml;
+
+            // Rankings (Dashboard Mini)
+            const leaderHtml = state.leaderboard.slice(0, 3).map((u, i) => `
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-black text-slate-300 w-4">${i+1}</span>
+                    <div class="w-8 h-8 rounded-lg ${u.self ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'} flex items-center justify-center text-[10px] font-black">${u.av}</div>
+                    <span class="text-xs font-bold flex-1 truncate">${u.name}</span>
+                    <span class="text-[10px] font-black text-slate-400">${u.xp}</span>
+                </div>
+            `).join('');
+            document.getElementById('miniLeaderboard').innerHTML = leaderHtml;
+            
+            lucide.createIcons();
+        }
+
+        function renderExams() {
+            const examHtml = state.exams.map(e => {
+                const days = Math.ceil((new Date(e.date) - new Date()) / (1000*60*60*24));
+                const dateFormatted = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+                return `
+                <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                    <div class="flex justify-between items-start">
+                        <span class="px-3 py-1 bg-slate-100 text-[10px] font-black rounded-full uppercase tracking-widest text-slate-500">${e.type}</span>
+                        <span class="text-xs font-bold text-red-500">${e.priority} Priority</span>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-slate-800">${e.subject}</h3>
+                        <p class="text-sm text-slate-400 font-medium">${dateFormatted}</p>
+                    </div>
+                    <div class="pt-4 border-t border-slate-50 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                             <div class="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-red-500">
+                                <i data-lucide="timer" class="w-5 h-5"></i>
+                             </div>
+                             <div>
+                                <p class="text-xs font-black text-slate-900">${days} Days Left</p>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Countdown</p>
+                             </div>
+                        </div>
+                        <button class="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline">Start Session</button>
+                    </div>
+                </div>`;
+            }).join('');
+            document.getElementById('fullExamList').innerHTML = examHtml;
+            lucide.createIcons();
+        }
+
+        function renderLeaderboard() {
+            const html = state.leaderboard.map((u, i) => `
+                <div class="flex items-center gap-4 p-4 rounded-[1.5rem] transition-all ${u.self ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-slate-50'}">
+                    <div class="w-8 text-center font-black text-slate-300">
+                        ${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                    </div>
+                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white ${i === 0 ? 'bg-yellow-500' : 'bg-indigo-600'}">
+                        ${u.av}
+                    </div>
+                    <div class="flex-1">
+                        <p class="font-bold text-slate-900">${u.name} ${u.self ? '<span class="text-[10px] ml-2 px-2 py-0.5 bg-indigo-200 text-indigo-700 rounded-full font-black">YOU</span>' : ''}</p>
+                        <p class="text-xs text-slate-400 font-medium">Level ${u.lvl} Scholar</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-black text-slate-900">${u.xp.toLocaleString()} XP</p>
+                        <div class="w-20 h-1 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                            <div class="h-full bg-indigo-500" style="width: ${Math.min(100, (u.xp/5000)*100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('leaderboardFullList').innerHTML = html;
+        }
+
+        function renderRewards() {
+            const html = state.rewards.map(r => `
+                <div class="reward-card bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm text-center space-y-6 transition-all">
+                    <div class="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
+                        <i data-lucide="${r.icon}" class="w-10 h-10"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-xl text-slate-800">${r.name}</h3>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">${r.type}</p>
+                    </div>
+                    <button class="w-full py-4 rounded-2xl font-black text-sm transition-all ${state.user.points >= r.cost ? 'bg-slate-900 text-white hover:bg-indigo-600 shadow-lg' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}">
+                        ${r.cost} XP
+                    </button>
+                </div>
+            `).join('');
+            document.getElementById('rewardGrid').innerHTML = html;
+            lucide.createIcons();
+        }
+
+        // --- ACTIONS ---
+        function toggleTask(id) {
+            const task = state.tasks.find(t => t.id === id);
+            if (!task.done) {
+                state.user.xp += task.pts;
+                state.user.points += task.pts;
+                checkLevelUp();
+            }
+            task.done = !task.done;
+            renderAll();
+        }
+
+        function checkLevelUp() {
+            if (state.user.xp >= state.user.nextXp) {
+                state.user.level++;
+                state.user.xp -= state.user.nextXp;
+                state.user.nextXp = Math.floor(state.user.nextXp * 1.2);
+            }
+        }
+
+        // --- AI LOGIC ---
+        async function generateAIKit() {
+            const btn = document.getElementById('aiBtn');
+            const input = document.getElementById('aiInput').value;
+            const loading = document.getElementById('aiLoading');
+            const output = document.getElementById('aiOutput');
+
+            if (!input.trim()) return;
+
+            btn.disabled = true;
+            loading.classList.remove('hidden');
+            output.classList.add('hidden');
+
+            const systemPrompt = "Expert tutor. Summarize in 3 sentences and create 3 MCQ questions. Response MUST be valid JSON: { \"summary\": \"...\", \"quiz\": [{\"question\": \"...\", \"options\": [\"...\"], \"answerIndex\": 0}] }";
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: input }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
+
+                const data = await response.json();
+                const result = JSON.parse(data.candidates[0].content.parts[0].text);
+                
+                document.getElementById('summaryText').innerText = result.summary;
+                document.getElementById('quizList').innerHTML = result.quiz.map((q, i) => `
+                    <div class="space-y-2 p-3 hover:bg-slate-50 rounded-2xl transition-colors">
+                        <p class="text-xs font-bold text-slate-700">${i+1}. ${q.question}</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            ${q.options.map(o => `<button class="p-2 bg-white border border-slate-100 text-[10px] rounded-xl hover:bg-indigo-50 hover:border-indigo-200 transition-all text-left font-medium">${o}</button>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+
+                output.classList.remove('hidden');
+                state.user.xp += 50;
+                checkLevelUp();
+                renderUserStats();
+            } catch (e) {
+                console.error(e);
+                alert("AI service encountered an issue. Please try again later.");
+            } finally {
+                btn.disabled = false;
+                loading.classList.add('hidden');
+            }
+        }
+
+        // --- FOCUS MODE LOGIC ---
+        function startFocusMode(mins) {
+            let seconds = mins * 60;
+            document.getElementById('dndOverlay').classList.add('active');
+            
+            state.focusTimer = setInterval(() => {
+                seconds--;
+                const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const s = (seconds % 60).toString().padStart(2, '0');
+                document.getElementById('dndTimerDisplay').innerText = `${m}:${s}`;
+                
+                if (seconds <= 0) {
+                    exitFocusMode(true);
+                }
+            }, 1000);
+        }
+
+        function exitFocusMode(completed) {
+            clearInterval(state.focusTimer);
+            document.getElementById('dndOverlay').classList.remove('active');
+            if (completed) {
+                state.user.xp += 200;
+                checkLevelUp();
+                renderUserStats();
+                alert("Deep Work session complete! +200 XP earned.");
+            }
+        }
+
+        // INITIALIZE
+        window.onload = () => {
+            renderAll();
+        };
+    </script>
+</body>
+</html>
